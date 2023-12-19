@@ -8,6 +8,28 @@ from django.utils.crypto import get_random_string
 from access.config import ConfigError
 from .personalized import personalized_template_context
 
+
+def get_template(exercise, default=None):
+    '''
+    Returns template for the exercise.
+
+    @type exercise: C{dict}
+    @param exercise: an exercise configuration
+    @type default: C{str}
+    @param default: a default template name to use if not configured
+    @rtype: C{str}
+    @return: a template
+    '''
+    template = None
+    if "template" in exercise:
+        template = exercise["template"]
+    elif default is not None:
+        template = default
+    else:
+        raise ConfigError("Missing \"template\" in exercise configuration.")
+    return template
+
+
 def render_configured_template(request, course, exercise, post_url, default=None, result=None):
     '''
     Renders a configured or optional default template.
@@ -27,14 +49,7 @@ def render_configured_template(request, course, exercise, post_url, default=None
     @rtype: C{django.http.response.HttpResponse}
     @return: a response
     '''
-    template = None
-    if "template" in exercise:
-        template = exercise["template"]
-    elif default is not None:
-        template = default
-    else:
-        raise ConfigError("Missing \"template\" in exercise configuration.")
-
+    template = get_template(exercise, default)
     return render_template(request, course, exercise, post_url, template, result)
 
 
@@ -61,6 +76,27 @@ def render_template(request, course, exercise, post_url, template, result=None):
         template = course['key'] + template[1:]
     return render(request, template,
         _exercise_context(course, exercise, post_url, result, request))
+
+
+def configured_template_to_str(course, exercise, post_url, default=None, result=None):
+    '''
+    Renders a configured or optional default template to text string.
+
+    @type course: C{dict}
+    @param course: a course configuration
+    @type exercise: C{dict}
+    @param exercise: an exercise configuration
+    @type post_url: C{str}
+    @param post_url: the post URL for the exercise
+    @type default: C{str}
+    @param default: a default template name to use if not configured
+    @type result: C{dict}
+    @param result: additional results
+    @rtype: C{str}
+    @return: rendered template content
+    '''
+    template = get_template(exercise, default)
+    return template_to_str(course, exercise, post_url, template, result)
 
 
 def template_to_str(course, exercise, post_url, template, result=None):

@@ -472,7 +472,8 @@ class GradedForm(forms.Form):
         Grades form answers.
         '''
         points = 0
-        error_fields = []
+        fields_points = {}
+        error_fields = {}
         error_groups = []
         g = 0
         i = 0
@@ -482,12 +483,14 @@ class GradedForm(forms.Form):
 
             for field in group["_fields"]:
                 prev = i
-                i, ok, p = self.grade_field(i, field)
+                i, ok, p, max_p, hints = self.grade_field(i, field)
+                if field["type"] != "static":
+                    fields_points[self.field_name(prev, field)] = { "points": p, "max_points": max_p }
                 group_correct = group_correct and ok
                 group_points += p
 
                 if not ok:
-                    error_fields.append(self.field_name(prev, field))
+                    error_fields[self.field_name(prev, field)] = hints
                     gname = self.group_name(g)
                     if gname not in error_groups:
                         error_groups.append(gname)
@@ -500,7 +503,7 @@ class GradedForm(forms.Form):
 
             g += 1
 
-        return (points, error_groups, error_fields)
+        return (points, fields_points, error_groups, error_fields)
 
     def compare_values(self, method, val, cmp, float_rel_tol=1e-09, float_abs_tol=0.0):
         # Note: when adding new compare methods or modifiers, remember to update
@@ -615,7 +618,7 @@ class GradedForm(forms.Form):
             self.fields[names[0]].grade_points = points
             self.fields[names[0]].max_points = max_points
             self.fields[name].hints = ' '.join(hints)
-            return i, all_ok, points
+            return i, all_ok, points, max_points, hints
 
         name = self.field_name(i, configuration)
         value = self.cleaned_data.get(name, None)
@@ -731,7 +734,7 @@ class GradedForm(forms.Form):
             self.fields[name].hints = hints
             self.fields[name].answer_correct = ok
 
-        return i + 1, ok, earned_points
+        return i + 1, ok, earned_points, points, hints
 
     def row_options(self, configuration, row):
         hint = row.get('hint', '')

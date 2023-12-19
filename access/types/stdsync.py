@@ -19,9 +19,10 @@ Functions take arguments:
 
 '''
 from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
 
 from util.http import not_modified_since, not_modified_response, cache_headers
-from util.templates import render_configured_template, render_template
+from util.templates import render_configured_template, render_template, configured_template_to_str
 from .forms import GradedForm
 from .auth import make_hash, get_uid
 from ..config import ConfigError
@@ -120,11 +121,12 @@ def createForm(request, course, exercise, post_url):
     if not form.randomized and not_modified_since(request, exercise):
         return not_modified_response(request, exercise)
 
-    result = { "form": form, "rejected": True }
+    validation_errors = dict([(k, [m for ve in v for m in ve.messages]) for k, v in form.errors.as_data().items()])
+    result = { "form": form, "rejected": True, "validation_errors": validation_errors}
 
     # Grade valid form posts.
     if form.is_valid():
-        (points, error_groups, error_fields) = form.grade()
+        (points, fields_points, error_groups, error_fields) = form.grade()
         points = pointsInRange(points, exercise["max_points"])
 
         # Allow passing to asynchronous grading.
@@ -136,7 +138,7 @@ def createForm(request, course, exercise, post_url):
         if points == 0 and not error_fields:
             points = exercise["max_points"]
 
-        result = { "form": form, "accepted": True, "points": points,
+        result = { "form": form, "accepted": True, "points": points, "fields_points": fields_points,
             "error_groups": error_groups, "error_fields": error_fields }
     else:
         # Don't reveal the correct answers if the form was rejected, and a
@@ -144,10 +146,16 @@ def createForm(request, course, exercise, post_url):
         form.reveal_correct = False
 
     return cache_headers(
-        render_configured_template(
-            request, course, exercise, post_url,
-            'access/create_form_default.html', result
-        ),
+        JsonResponse({
+            'html': configured_template_to_str(
+                course,
+                exercise,
+                post_url,
+                'access/create_form_default.html',
+                dict_without_keys(result, ["fields_points", "validation_errors"])
+            ),
+            'json': dict_without_keys(result, ["form"]),
+        }),
         request,
         exercise,
         form.randomized,
@@ -189,3 +197,11 @@ def pointsInRange(points, max_points):
     if points < 0:
         return 0
     return points
+
+
+def dict_without_keys(dictionary, keys):
+    result = dictionary.copy()
+    for key in keys:
+        if key in result:
+            result.pop(key)
+    return result
